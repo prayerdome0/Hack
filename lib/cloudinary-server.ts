@@ -1,10 +1,11 @@
+import { createHash } from 'crypto';
 import { ApiError } from '@/lib/api-error';
-import { DEFAULT_CLOUDINARY_CONFIG } from '@/lib/cloudinary-defaults';
 
 type CloudinaryEnvironment = {
+  // Unsigned-upload variables (public by design, embedded in the client bundle)
   NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?: string;
   NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?: string;
-  // Legacy signed-upload variables (still used by the destroy endpoint)
+  // Signed-upload variables (server-only)
   CLOUDINARY_URL?: string;
   CLOUDINARY_CLOUD_NAME?: string;
   CLOUDINARY_API_KEY?: string;
@@ -51,68 +52,36 @@ function containsPlaceholder(value: string) {
   return /[<>]|your[_ -]?(api|cloud|secret)/i.test(value);
 }
 
-const PLACEHOLDER_GUIDE =
-  'Cloudinary console → Settings (gear) → API Keys shows the finished value. Copy the cloud name and set it as NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME, then create an unsigned upload preset and set it as NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET.';
+const SIGNED_PLACEHOLDER_GUIDE =
+  'Cloudinary console → Settings (gear) → API Keys shows the finished value. Copy the CLOUDINARY_URL value as-is into your server environment variables.';
+
+const UNSIGNED_PLACEHOLDER_GUIDE =
+  'Set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME to your Cloudinary cloud name and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET to an unsigned upload preset (Cloudinary console → Settings → Upload).';
 
 /**
- * Checks whether the unsigned upload configuration is present.
- * Uploads only need NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and
- * NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET — no API key or secret required.
- * When the variables are unset, the shipped defaults from
- * `lib/cloudinary-defaults.ts` are used (mirroring the Firebase defaults).
+ * Computes a Cloudinary upload signature.
+ *
+ * The signature covers every parameter that will be sent with the upload
+ * (except `file`, `api_key` and `signature`), sorted alphabetically and
+ * joined with `&`, followed by the API secret. This matches Cloudinary's
+ * server-side signature algorithm.
  */
-export function getUnsignedUploadStatus(
-  environment?: CloudinaryEnvironment
-): { configured: boolean; cloudName?: string; message?: string } {
-  const env = environment || (process.env as CloudinaryEnvironment);
-
-  const envCloudName = env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
-  const envUploadPreset = env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
-
-  if (envCloudName && containsPlaceholder(envCloudName)) {
-    return {
-      configured: false,
-      message:
-        'NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME still contains placeholder text. ' +
-        PLACEHOLDER_GUIDE
-    };
-  }
-
-  if (envUploadPreset && containsPlaceholder(envUploadPreset)) {
-    return {
-      configured: false,
-      message:
-        'NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET still contains placeholder text. ' +
-        PLACEHOLDER_GUIDE
-    };
-  }
-
-  const cloudName = envCloudName || DEFAULT_CLOUDINARY_CONFIG.cloudName;
-  const uploadPreset = envUploadPreset || DEFAULT_CLOUDINARY_CONFIG.uploadPreset;
-
-  if (!cloudName) {
-    return {
-      configured: false,
-      message:
-        'NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is missing. Set it to your Cloudinary cloud name, then redeploy.'
-    };
-  }
-
-  if (!uploadPreset) {
-    return {
-      configured: false,
-      message:
-        'NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET is missing. Create an unsigned upload preset in your Cloudinary dashboard and set it, then redeploy.'
-    };
-  }
-
-  return { configured: true, cloudName };
+export function signCloudinaryParams(
+  apiSecret: string,
+  params: Record<string, string>
+): { signature: string; toSign: string } {
+  const toSign = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join('&');
+  const signature = createHash('sha1').update(`${toSign}${apiSecret}`).digest('hex');
+  return { signature, toSign };
 }
 
 /**
- * Reads full Cloudinary credentials for the destroy endpoint.
- * The destroy endpoint still needs API key + secret (signed operation).
- * Falls back to CLOUDINARY_URL or individual variables.
+ * Reads full Cloudinary credentials for signed server-side operations
+ * (upload signing and destroy). Falls back to CLOUDINARY_URL or individual
+ * variables.
  */
 export function getCloudinaryConfig(
   environment?: CloudinaryEnvironment
@@ -123,7 +92,7 @@ export function getCloudinaryConfig(
   if (rawUrl) {
     if (containsPlaceholder(rawUrl)) {
       throw new CloudinaryConfigurationError(
-        'CLOUDINARY_URL still contains placeholder text. ' + PLACEHOLDER_GUIDE
+        'CLOUDINARY_URL still contains placeholder text. ' + SIGNED_PLACEHOLDER_GUIDE
       );
     }
     try {
@@ -153,13 +122,88 @@ export function getCloudinaryConfig(
     if ([cloudName, apiKey, apiSecret].some(containsPlaceholder)) {
       throw new CloudinaryConfigurationError(
         'Cloudinary environment variables still contain placeholder text. ' +
-          PLACEHOLDER_GUIDE
+          SIGNED_PLACEHOLDER_GUIDE
       );
     }
     return { cloudName, apiKey, apiSecret };
   }
 
   throw new CloudinaryConfigurationError(
-    'The Cloudinary destroy endpoint needs full credentials. Set CLOUDINARY_URL (or CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET) as server-only environment variables, then redeploy.'
+    'Cloudinary is not configured on the server. Set CLOUDINARY_URL (or CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET) as server-only environment variables, then redeploy.'
   );
+}
+
+export type CloudinaryUploadStatus =
+  | {
+      configured: true;
+      mode: 'signed' | 'unsigned';
+      cloudName: string;
+      message?: string;
+    }
+  | {
+      configured: false;
+      mode: 'none';
+      cloudName?: undefined;
+      message: string;
+    };
+
+/**
+ * Reports how media uploads are configured for this deployment.
+ *
+ * Unsigned uploads (NEXT_PUBLIC_CLOUDINARY_* variables) are the primary mode
+ * because they post directly from the browser without a server round-trip.
+ * Signed uploads (server-side CLOUDINARY_URL) are a supported fallback.
+ */
+export function getUploadStatus(environment?: CloudinaryEnvironment): CloudinaryUploadStatus {
+  const env = environment || (process.env as CloudinaryEnvironment);
+
+  // 1) Unsigned uploads — primary mode
+  const cloudName = env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
+  const uploadPreset = env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
+
+  if (cloudName && containsPlaceholder(cloudName)) {
+    return {
+      configured: false,
+      mode: 'none',
+      message:
+        'NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME still contains placeholder text. ' +
+        UNSIGNED_PLACEHOLDER_GUIDE
+    };
+  }
+
+  if (uploadPreset && containsPlaceholder(uploadPreset)) {
+    return {
+      configured: false,
+      mode: 'none',
+      message:
+        'NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET still contains placeholder text. ' +
+        UNSIGNED_PLACEHOLDER_GUIDE
+    };
+  }
+
+  if (cloudName && uploadPreset) {
+    return { configured: true, mode: 'unsigned', cloudName };
+  }
+
+  // 2) Signed uploads — fallback when no unsigned preset is configured
+  try {
+    const config = getCloudinaryConfig(env);
+    return { configured: true, mode: 'signed', cloudName: config.cloudName };
+  } catch (error) {
+    // Keep going; nothing usable may still be reported below.
+    if (error instanceof CloudinaryConfigurationError) {
+      // Placeholder text in CLOUDINARY_URL is worth surfacing verbatim.
+      if (containsPlaceholder(cleanEnvironmentValue(env.CLOUDINARY_URL))) {
+        return { configured: false, mode: 'none', message: error.message };
+      }
+    }
+  }
+
+  // 3) Nothing usable configured
+  return {
+    configured: false,
+    mode: 'none',
+    message:
+      'Media uploads are not configured. Set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET for unsigned uploads (or CLOUDINARY_URL on the server), then redeploy.'
+  };
 }
