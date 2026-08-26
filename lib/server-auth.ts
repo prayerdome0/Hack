@@ -27,9 +27,9 @@ export async function requireAdmin(request: Request): Promise<DecodedIdToken> {
     throw new Response('Invalid authentication token', { status: 401 });
   }
 
-  // Prefer a custom claim, while keeping the Firestore profile as the source of truth
-  // during an initial deployment. Clients can never write this field under firestore.rules.
-  if (decoded.admin === true) return decoded;
+  // Admin status comes from the Firestore `role` field only — no separate
+  // admin configuration or custom claims are required. Clients can never write
+  // this field under firestore.rules.
   const profile = await getAdminDb().collection('users').doc(decoded.uid).get();
   if (profile.data()?.role !== 'admin') {
     throw new Response('Admin access required', { status: 403 });
