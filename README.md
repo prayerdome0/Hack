@@ -22,9 +22,9 @@ The media API verifies the Firebase ID token and reads the caller's own `users/{
 
 ## Cloudinary media uploads
 
-Uploads require Cloudinary credentials on the **server**. The cloud name by itself is not enough to sign an upload.
+Media uploads are **signed server-side** using `CLOUDINARY_URL`. The browser receives only a short-lived signature (plus the API key and timestamp) and posts the file directly to Cloudinary — the API secret never enters the client bundle, and the file is never proxied through the app.
 
-1. In the Cloudinary console, open **Settings → API Keys** and copy the `CLOUDINARY_URL` value.
+1. In the Cloudinary console, open **Settings → API Keys** and copy the `CLOUDINARY_URL` value (it already contains your API key and secret).
 2. Add it to `.env.local` for local development:
 
    ```dotenv
@@ -32,18 +32,17 @@ Uploads require Cloudinary credentials on the **server**. The cloud name by itse
    ```
 
    As an alternative, set all three of `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`.
-3. For Vercel, add the same server-only variable under **Project Settings → Environment Variables** for Production (and Preview when needed), then redeploy. Do not name it `NEXT_PUBLIC_CLOUDINARY_URL`.
-4. Sign in as an admin and open **Admin → Settings**. The live “Cloudinary signed uploads” check confirms whether the deployed server can read a complete configuration.
+3. For Vercel, add the same server-only variable under **Project Settings → Environment Variables** for Production (and Preview when needed), then redeploy. Do **not** name it `NEXT_PUBLIC_CLOUDINARY_URL`.
+4. Sign in as an admin and open **Admin → Settings**. The live “Cloudinary media uploads” check confirms whether the deployed server can read a complete configuration.
 
-If configuration is absent or incomplete, the upload form now reports the exact setup problem instead of the generic “Unexpected server error.” API secrets never enter the client bundle; the browser receives only a short-lived signed upload request.
+If `CLOUDINARY_URL` is absent, uploads fall back to an **unsigned** upload when `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` and `NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET` are set (the preset must be marked “unsigned” in the Cloudinary dashboard). With neither configured, the upload form reports the exact setup problem instead of a generic “check your connection” error.
 
 ### Uploads still say “not configured” — checklist
 
-- **`<your_api_key>` and `<your_api_secret>` are placeholders.** They must be replaced with the real API Key (a long number) and API Secret from Cloudinary console → **Settings (gear) → API Keys**. That page shows a finished `CLOUDINARY_URL` you can copy as-is.
+- **`API_KEY` and `API_SECRET` in `CLOUDINARY_URL` are placeholders.** Replace them with the real API Key (a long number) and API Secret from Cloudinary console → **Settings (gear) → API Keys**. That page shows a finished `CLOUDINARY_URL` you can copy as-is.
 - The variable belongs in the **hosting platform’s environment variables** (Vercel: Project → Settings → Environment Variables, Production), **not** in `.env.example` — that file is only a template and changing it configures nothing.
 - After saving the variable you must **redeploy** (Vercel: Deployments → ⋯ → Redeploy). Existing deployments do not pick up new variables on their own.
 - Do **not** prefix the name with `NEXT_PUBLIC_`; the server deliberately ignores `NEXT_PUBLIC_CLOUDINARY_URL` so the secret is never shipped to browsers.
-- A Cloudinary **upload preset** (signed or unsigned) is not needed and never used — the app signs uploads server-side.
 - For local development, put the same variable in `.env.local` and restart `npm run dev`.
 
 Signed uploads organize media under `simz-naxty/audio`, `simz-naxty/covers`, `simz-naxty/artists` and `simz-naxty/playlists`. Cloudinary handles audio through its `video` upload endpoint and returns a secure delivery URL.

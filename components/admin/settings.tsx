@@ -14,6 +14,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { AdminCard, AdminGuard, AdminHeading } from '@/components/admin/admin-shared';
+import { CLOUDINARY_FOLDERS } from '@/lib/cloudinary-folders';
 
 type HealthState = 'checking' | 'ready' | 'warning';
 type CloudinaryHealth = {
@@ -50,6 +51,7 @@ function SettingsContent() {
         });
         const payload = (await response.json()) as {
           configured?: boolean;
+          mode?: 'signed' | 'unsigned' | 'none';
           cloudName?: string;
           message?: string;
           error?: string;
@@ -65,13 +67,17 @@ function SettingsContent() {
             ? {
                 state: 'ready',
                 detail: payload.cloudName
-                  ? `Connected to ${payload.cloudName}`
-                  : 'Signed uploads are ready',
+                  ? `${
+                      payload.mode === 'unsigned' ? 'Unsigned' : 'Signed'
+                    } uploads to ${payload.cloudName}`
+                  : 'Uploads are ready',
                 authorized: true
               }
             : {
                 state: 'warning',
-                detail: payload.message || 'Add CLOUDINARY_URL and redeploy',
+                detail:
+                  payload.message ||
+                  'Set CLOUDINARY_URL on the server (or configure unsigned uploads) and redeploy',
                 authorized: true
               }
         );
@@ -121,7 +127,7 @@ function SettingsContent() {
               detail={configured ? 'Client SDK ready' : 'Add NEXT_PUBLIC_FIREBASE_* variables'}
             />
             <HealthRow
-              label="Cloudinary unsigned uploads"
+              label="Cloudinary media uploads"
               state={cloudinary.state}
               detail={cloudinary.detail}
             />
@@ -153,16 +159,16 @@ function SettingsContent() {
                 Media organization
               </h2>
               <p className="mt-1 text-xs text-white/35">
-                Unsigned Cloudinary uploads use predictable folders.
+                Cloudinary uploads use predictable folders.
               </p>
             </div>
           </div>
           <div className="mt-6 space-y-2">
             {[
-              'root/',
-              'root/covers/',
-              'root/artists/',
-              'root/playlists/'
+              CLOUDINARY_FOLDERS.audio,
+              CLOUDINARY_FOLDERS.covers,
+              CLOUDINARY_FOLDERS.artists,
+              CLOUDINARY_FOLDERS.playlists
             ].map((folder) => (
               <div
                 key={folder}
@@ -190,10 +196,9 @@ function SettingsContent() {
         </div>
         <ul className="mt-6 grid gap-4 text-sm leading-6 text-white/50 md:grid-cols-3">
           <li>
-            Cloudinary uploads use an unsigned preset — only{' '}
-            <code className="text-gold/80">NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</code> and{' '}
-            <code className="text-gold/80">NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET</code>{' '}
-            are needed. No API key or secret is required.
+            Uploads are signed server-side with{' '}
+            <code className="text-gold/80">CLOUDINARY_URL</code> — the API secret never
+            reaches the browser. The unsigned preset path is only a fallback.
           </li>
           <li>
             Firestore rules protect favorites, playlists and listening history by Firebase
