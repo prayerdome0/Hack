@@ -1,48 +1,78 @@
-import type { UploadResult } from '@/lib/types';
+import {
+  CLOUDINARY_UPLOAD_PRESET,
+  checkFileSize,
+  fileExtension,
+  resourceTypeFor
+} from '@/lib/cloudinary-shared';
+import { recordUpload } from '@/lib/firestore';
+import type { UploadRecord, UploadResult } from '@/lib/types';
 
 type CloudinaryErrorPayload = {
   error?: string | { message?: unknown };
   message?: string;
+  uploadPreset?: string;
+  cloudinary?: {
+    httpStatus?: number;
+    cloudinaryMessage?: string;
+    errorCode?: string | number | null;
+    resourceType?: string;
+    endpoint?: string;
+    uploadPreset?: string;
+  };
 };
 
-function describeError(message: string) {
-  const normalized = message.trim().toLowerCase();
-  if (!normalized) return 'Cloudinary rejected this upload. Try again or check the Cloudinary account configuration.';
-  if (normalized.includes('unsigned') || normalized.includes('upload preset')) {
-    return 'Cloudinary upload configuration rejected this file. Check the Cloudinary account configuration.';
-  }
-  if (normalized.includes('too large') || normalized.includes('exceeds')) {
-    return 'That file is too large for this Cloudinary plan. Try a smaller file.';
-  }
-  // Avoid displaying the same prefix twice when an API already returns a
-  // human-readable Cloudinary error.
-  return normalized.startsWith('cloudinary rejected this upload:')
-    ? message.trim()
-    : `Cloudinary rejected this upload: ${message.trim()}`;
-}
-
-function errorMessage(payload: CloudinaryErrorPayload | undefined) {
+/**
+ * Read the real error the API returned.
+ *
+ * The route already produces an actionable, Cloudinary-derived sentence, so it
+ * is surfaced verbatim. There is deliberately no generic
+ * "Cloudinary rejected this upload…" fallback: the only case without a
+ * provider message is a transport failure, which is described as such.
+ */
+function errorMessage(payload: CloudinaryErrorPayload | undefined, status: number) {
   const providerError = payload?.error;
-  if (typeof providerError === 'string') return providerError;
+  if (typeof providerError === 'string' && providerError.trim()) return providerError.trim();
   if (providerError && typeof providerError === 'object' && 'message' in providerError) {
     const message = (providerError as { message?: unknown }).message;
-    if (typeof message === 'string') return message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
   }
-  return typeof payload?.message === 'string' ? payload.message : '';
+  if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  if (typeof payload?.cloudinary?.cloudinaryMessage === 'string' && payload.cloudinary.cloudinaryMessage.trim()) {
+    return `Cloudinary upload failed: ${payload.cloudinary.cloudinaryMessage.trim()}`;
+  }
+  return `Cloudinary upload failed: the server returned HTTP ${status} with no error message.`;
+}
+
+/** In development, log the full safe Cloudinary diagnostic in the browser console too. */
+function logDevelopmentDiagnostic(payload: CloudinaryErrorPayload | undefined) {
+  if (process.env.NODE_ENV === 'production') return;
+  if (!payload?.cloudinary) return;
+  // Only non-secret fields ever reach the browser: status, message, code,
+  // resource type, endpoint and preset name.
+  console.error('[cloudinary] upload failed', payload.cloudinary);
 }
 
 /**
- * Upload through our server route. This deliberately does not read any
- * Cloudinary environment variable in the browser. The legacy folder argument
- * is retained for callers but ignored: this app does not create folders.
+ * Upload through our authenticated server route, which performs the unsigned
+ * `Seedwell` upload against cloud `dhad95cch`.
+ *
+ * No Cloudinary environment variable, API key or API secret is ever read in
+ * the browser. The legacy folder argument is retained for callers but ignored:
+ * this app does not create folders.
  */
 export async function uploadToCloudinary(
   file: File,
   _legacyFolder: string | undefined,
   token: string,
   onProgress?: (progress: number) => void,
-  publicId?: string
+  publicId?: string,
+  uploadedBy?: string
 ): Promise<UploadResult> {
+  // Enforce the application's upload limit before a byte leaves the browser.
+  const resourceType = resourceTypeFor({ name: file.name, type: file.type });
+  const size = checkFileSize({ name: file.name, size: file.size }, resourceType);
+  if (!size.ok) throw new Error(size.message);
+
   const form = new FormData();
   form.append('file', file);
   if (publicId) form.append('public_id', publicId);
@@ -58,15 +88,43 @@ export async function uploadToCloudinary(
     xhr.onabort = () => reject(new Error('The media upload was cancelled.'));
     xhr.onload = () => {
       let payload: (UploadResult & CloudinaryErrorPayload) | undefined;
-      try { payload = JSON.parse(xhr.responseText) as UploadResult & CloudinaryErrorPayload; } catch { /* handled below */ }
+      try {
+        payload = JSON.parse(xhr.responseText) as UploadResult & CloudinaryErrorPayload;
+      } catch {
+        /* handled below */
+      }
       if (xhr.status >= 200 && xhr.status < 300 && payload?.secure_url && payload.public_id) {
         onProgress?.(100);
-        resolve(payload);
+        const result = payload;
+        // Cloudinary confirmed the upload, so the record can be saved. A
+        // rejected upload never reaches this branch, so no fake record is
+        // created. A bookkeeping failure must not fail the upload itself.
+        void saveUploadRecord(result, file, uploadedBy).catch((error) => {
+          console.error('[cloudinary] upload succeeded but the record could not be saved', error);
+        });
+        resolve(result);
         return;
       }
-      const message = errorMessage(payload);
-      reject(new Error(describeError(message)));
+      logDevelopmentDiagnostic(payload);
+      reject(new Error(errorMessage(payload, xhr.status)));
     };
     xhr.send(form);
   });
 }
+
+/** Build and persist the upload record from Cloudinary's confirmed response. */
+async function saveUploadRecord(result: UploadResult, file: File, uploadedBy?: string) {
+  const record: UploadRecord = {
+    fileName: file.name || result.original_filename || result.public_id,
+    cloudinaryPublicId: result.public_id,
+    secureUrl: result.secure_url,
+    resourceType: (result.resource_type as UploadRecord['resourceType']) || resourceTypeFor({ name: file.name, type: file.type }),
+    format: result.format || fileExtension(file.name),
+    bytes: typeof result.bytes === 'number' ? result.bytes : file.size,
+    uploadedAt: result.created_at || new Date().toISOString(),
+    uploadedBy: uploadedBy || 'unknown'
+  };
+  await recordUpload(record);
+}
+
+export { CLOUDINARY_UPLOAD_PRESET };

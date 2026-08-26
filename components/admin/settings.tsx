@@ -51,6 +51,8 @@ function SettingsContent() {
           configured?: boolean;
           mode?: 'signed' | 'unsigned' | 'none';
           cloudName?: string;
+          uploadPreset?: string;
+          presetState?: 'unsigned' | 'signed' | 'missing' | 'unavailable' | 'unknown';
           message?: string;
           error?: string;
         };
@@ -60,22 +62,24 @@ function SettingsContent() {
         }
         if (cancelled) return;
 
+        // Show exactly what Cloudinary reported about the preset instead of a
+        // vague "uploads may be misconfigured" line.
         setCloudinary(
           payload.configured
             ? {
                 state: 'ready',
-                detail: payload.cloudName
-                  ? `${
-                      payload.mode === 'unsigned' ? 'Server' : 'Server'
-                    } uploads to ${payload.cloudName}`
-                  : 'Uploads are ready',
+                detail:
+                  payload.message ||
+                  (payload.cloudName
+                    ? `Unsigned uploads to ${payload.cloudName} using preset "${payload.uploadPreset}"`
+                    : 'Uploads are ready'),
                 authorized: true
               }
             : {
                 state: 'warning',
                 detail:
                   payload.message ||
-                  'Set the server-only CLOUDINARY_URL in Vercel and redeploy',
+                  'Set the server-only CLOUDINARY_URL in the deployment environment and redeploy',
                 authorized: true
               }
         );
@@ -179,7 +183,7 @@ function SettingsContent() {
         </div>
         <ul className="mt-6 grid gap-4 text-sm leading-6 text-white/50 md:grid-cols-3">
           <li>
-            Uploads are proxied through the server using authenticated Cloudinary uploads. Only the server-only <code className="text-gold/80">CLOUDINARY_URL</code> is used; its credentials never reach the browser. No upload preset is required.
+            Uploads are proxied through the server and sent to Cloudinary as unsigned uploads with the <code className="text-gold/80">Seedwell</code> preset. The server-only <code className="text-gold/80">CLOUDINARY_URL</code> is used for signed operations such as delete; its credentials never reach the browser.
           </li>
           <li>
             Firestore rules protect favorites, playlists and listening history by Firebase

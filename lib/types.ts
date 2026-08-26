@@ -113,4 +113,24 @@ export interface UploadResult {
   resource_type: string;
   bytes: number;
   format?: string;
+  width?: number | null;
+  height?: number | null;
+  original_filename?: string;
+  created_at?: string;
+  is_audio?: boolean;
+}
+
+/**
+ * The persisted record of a successful Cloudinary upload.
+ * Written only after Cloudinary confirms the upload.
+ */
+export interface UploadRecord {
+  fileName: string;
+  cloudinaryPublicId: string;
+  secureUrl: string;
+  resourceType: 'image' | 'video' | 'raw';
+  format: string;
+  bytes: number;
+  uploadedAt: string;
+  uploadedBy: string;
 }

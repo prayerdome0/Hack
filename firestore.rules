@@ -15,6 +15,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Audit trail of confirmed Cloudinary uploads. Records are written only
+    // after Cloudinary returns a secure_url, and are never edited afterwards.
+    match /uploads/{uploadId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.uploadedBy == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
     match /songs/{songId} {
       allow read: if resource.data.published == true || isAdmin();
       allow create, update, delete: if isAdmin();

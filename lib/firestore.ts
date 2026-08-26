@@ -20,9 +20,9 @@ import {
   type Unsubscribe
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { Album, Artist, Playlist, RecentlyPlayed, Song } from '@/lib/types';
+import type { Album, Artist, Playlist, RecentlyPlayed, Song, UploadRecord } from '@/lib/types';
 
-type CollectionName = 'songs' | 'artists' | 'albums' | 'playlists' | 'users' | 'favorites' | 'recentlyPlayed';
+type CollectionName = 'songs' | 'artists' | 'albums' | 'playlists' | 'users' | 'favorites' | 'recentlyPlayed' | 'uploads';
 
 export function typedCollection<T extends DocumentData>(name: CollectionName) {
   if (!db) return undefined;
@@ -105,4 +105,15 @@ export function mapRecentlyPlayed(items: RecentlyPlayed[], songs: Song[]) {
 
 export function emptySongCollections(): { songs: Song[]; artists: Artist[]; albums: Album[]; playlists: Playlist[] } {
   return { songs: [], artists: [], albums: [], playlists: [] };
+}
+
+/**
+ * Persist the record of a completed Cloudinary upload.
+ *
+ * This is only ever called after Cloudinary has confirmed the upload and
+ * returned a `secure_url`, so a rejected upload never produces a record.
+ */
+export async function recordUpload(record: UploadRecord) {
+  if (!db) throw new Error('Firebase is not configured yet. Add your Firebase environment variables.');
+  return addDoc(collection(db, 'uploads'), record as unknown as DocumentData);
 }
