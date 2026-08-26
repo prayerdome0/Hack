@@ -16,7 +16,7 @@ export async function GET(request: Request) {
         configured: status.configured,
         mode: status.mode,
         cloudName: status.cloudName,
-        message: status.message
+        message: status.configured ? undefined : status.message
       },
       { headers: { 'Cache-Control': 'no-store' } }
     );

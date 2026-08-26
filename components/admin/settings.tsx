@@ -4,7 +4,6 @@ import Link from 'next/link';
 import {
   CheckCircle2,
   Cloud,
-  Database,
   ExternalLink,
   KeyRound,
   Loader2,
@@ -14,7 +13,6 @@ import {
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { AdminCard, AdminGuard, AdminHeading } from '@/components/admin/admin-shared';
-import { CLOUDINARY_FOLDERS } from '@/lib/cloudinary-folders';
 
 type HealthState = 'checking' | 'ready' | 'warning';
 type CloudinaryHealth = {
@@ -68,7 +66,7 @@ function SettingsContent() {
                 state: 'ready',
                 detail: payload.cloudName
                   ? `${
-                      payload.mode === 'unsigned' ? 'Unsigned' : 'Signed'
+                      payload.mode === 'unsigned' ? 'Server' : 'Server'
                     } uploads to ${payload.cloudName}`
                   : 'Uploads are ready',
                 authorized: true
@@ -77,7 +75,7 @@ function SettingsContent() {
                 state: 'warning',
                 detail:
                   payload.message ||
-                  'Set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET and redeploy',
+                  'Set the server-only CLOUDINARY_URL in Vercel and redeploy',
                 authorized: true
               }
         );
@@ -159,26 +157,11 @@ function SettingsContent() {
                 Media organization
               </h2>
               <p className="mt-1 text-xs text-white/35">
-                Cloudinary uploads use predictable folders.
+                Uploads use Cloudinary without creating folders.
               </p>
             </div>
           </div>
-          <div className="mt-6 space-y-2">
-            {[
-              CLOUDINARY_FOLDERS.audio,
-              CLOUDINARY_FOLDERS.covers,
-              CLOUDINARY_FOLDERS.artists,
-              CLOUDINARY_FOLDERS.playlists
-            ].map((folder) => (
-              <div
-                key={folder}
-                className="flex items-center gap-3 rounded-xl border border-white/[.07] px-3.5 py-3"
-              >
-                <Database className="h-4 w-4 text-gold/70" />
-                <code className="text-xs text-white/65">{folder}</code>
-              </div>
-            ))}
-          </div>
+          <p className="mt-6 text-sm leading-6 text-white/45">Files are stored without application-created Cloudinary folders. Images, videos, audio, PDFs and documents use the appropriate Cloudinary resource type.</p>
         </AdminCard>
       </div>
 
@@ -196,11 +179,7 @@ function SettingsContent() {
         </div>
         <ul className="mt-6 grid gap-4 text-sm leading-6 text-white/50 md:grid-cols-3">
           <li>
-            Uploads use an unsigned preset straight from the browser —{' '}
-            <code className="text-gold/80">NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</code> and{' '}
-            <code className="text-gold/80">NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET</code>.
-            Signed uploads (<code className="text-gold/80">CLOUDINARY_URL</code>) remain a
-            fallback.
+            Uploads are proxied through the server. Only the server-only <code className="text-gold/80">CLOUDINARY_URL</code> is used; its credentials never reach the browser. The existing <code className="text-gold/80">Seedwell</code> preset is used for uploads.
           </li>
           <li>
             Firestore rules protect favorites, playlists and listening history by Firebase
