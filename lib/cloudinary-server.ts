@@ -11,6 +11,7 @@ type CloudinaryEnvironment = {
   CLOUDINARY_CLOUD_NAME?: string;
   CLOUDINARY_API_KEY?: string;
   CLOUDINARY_API_SECRET?: string;
+  NEXT_PUBLIC_CLOUDINARY_URL?: string;
   NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?: string;
 };
 
@@ -50,6 +51,9 @@ function containsPlaceholder(value: string) {
   return /[<>]|your[_ -]?(api|cloud|secret)/i.test(value);
 }
 
+const PLACEHOLDER_GUIDE =
+  'Cloudinary console → Settings (gear) → API Keys shows the finished value, already containing your real API Key (a number) and API Secret. Copy that whole cloudinary://… line, replace the placeholder value, then redeploy.';
+
 function separateConfiguration(env: CloudinaryEnvironment): CloudinaryServerConfig | undefined {
   const cloudName = cleanEnvironmentValue(
     env.CLOUDINARY_CLOUD_NAME || env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
@@ -58,12 +62,13 @@ function separateConfiguration(env: CloudinaryEnvironment): CloudinaryServerConf
   const apiSecret = cleanEnvironmentValue(env.CLOUDINARY_API_SECRET);
 
   if (!cloudName && !apiKey && !apiSecret) return undefined;
-  if (
-    !cloudName ||
-    !apiKey ||
-    !apiSecret ||
-    [cloudName, apiKey, apiSecret].some(containsPlaceholder)
-  ) {
+  if ([cloudName, apiKey, apiSecret].some(containsPlaceholder)) {
+    throw new CloudinaryConfigurationError(
+      'The Cloudinary environment variables still contain placeholder text such as <your_api_key> or <your_api_secret>. ' +
+        PLACEHOLDER_GUIDE
+    );
+  }
+  if (!cloudName || !apiKey || !apiSecret) {
     throw new CloudinaryConfigurationError(
       'Cloudinary configuration is incomplete. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET on the server, then redeploy.'
     );
@@ -73,6 +78,12 @@ function separateConfiguration(env: CloudinaryEnvironment): CloudinaryServerConf
 }
 
 function urlConfiguration(rawValue: string): CloudinaryServerConfig {
+  if (containsPlaceholder(rawValue)) {
+    throw new CloudinaryConfigurationError(
+      'CLOUDINARY_URL still contains placeholder text such as <your_api_key> or <your_api_secret> — those are not real credentials. ' +
+        PLACEHOLDER_GUIDE
+    );
+  }
   try {
     const parsed = new URL(rawValue);
     if (parsed.protocol !== 'cloudinary:') throw new Error('Unexpected protocol');
@@ -80,19 +91,15 @@ function urlConfiguration(rawValue: string): CloudinaryServerConfig {
     const cloudName = decodeURIComponent(parsed.hostname);
     const apiKey = decodeURIComponent(parsed.username);
     const apiSecret = decodeURIComponent(parsed.password);
-    if (
-      !cloudName ||
-      !apiKey ||
-      !apiSecret ||
-      [cloudName, apiKey, apiSecret].some(containsPlaceholder)
-    ) {
+    if (!cloudName || !apiKey || !apiSecret) {
       throw new Error('Missing Cloudinary URL component');
     }
 
     return { cloudName, apiKey, apiSecret };
   } catch {
     throw new CloudinaryConfigurationError(
-      'CLOUDINARY_URL is invalid. Use cloudinary://API_KEY:API_SECRET@CLOUD_NAME in the server environment, then redeploy.'
+      'CLOUDINARY_URL is invalid. It must look like cloudinary://API_KEY:API_SECRET@CLOUD_NAME with no brackets, quotes or extra text (the API key is a long number, the secret a mix of letters and digits). ' +
+        PLACEHOLDER_GUIDE
     );
   }
 }
@@ -122,7 +129,15 @@ export function getCloudinaryConfig(
   const separate = separateConfiguration(env);
   if (separate) return separate;
 
+  if (cleanEnvironmentValue(env.NEXT_PUBLIC_CLOUDINARY_URL)) {
+    throw new CloudinaryConfigurationError(
+      'Media uploads are not configured on this deployment. The server found NEXT_PUBLIC_CLOUDINARY_URL, which is a browser-exposed variable it ignores on purpose. Delete it and set the value as CLOUDINARY_URL instead, then redeploy.'
+    );
+  }
+
   throw new CloudinaryConfigurationError(
-    'Media uploads are not configured on this deployment. Add CLOUDINARY_URL to the server environment, then redeploy.'
+    'Media uploads are not configured on this deployment: the server cannot see CLOUDINARY_URL at all. ' +
+      'Add it as an environment variable on the hosting platform (Vercel: Project → Settings → Environment Variables, Production), not in .env.example or other files in the repo, then redeploy so a new deployment picks it up. ' +
+      PLACEHOLDER_GUIDE
   );
 }

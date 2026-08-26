@@ -37,6 +37,15 @@ Uploads require Cloudinary credentials on the **server**. The cloud name by itse
 
 If configuration is absent or incomplete, the upload form now reports the exact setup problem instead of the generic “Unexpected server error.” API secrets never enter the client bundle; the browser receives only a short-lived signed upload request.
 
+### Uploads still say “not configured” — checklist
+
+- **`<your_api_key>` and `<your_api_secret>` are placeholders.** They must be replaced with the real API Key (a long number) and API Secret from Cloudinary console → **Settings (gear) → API Keys**. That page shows a finished `CLOUDINARY_URL` you can copy as-is.
+- The variable belongs in the **hosting platform’s environment variables** (Vercel: Project → Settings → Environment Variables, Production), **not** in `.env.example` — that file is only a template and changing it configures nothing.
+- After saving the variable you must **redeploy** (Vercel: Deployments → ⋯ → Redeploy). Existing deployments do not pick up new variables on their own.
+- Do **not** prefix the name with `NEXT_PUBLIC_`; the server deliberately ignores `NEXT_PUBLIC_CLOUDINARY_URL` so the secret is never shipped to browsers.
+- A Cloudinary **upload preset** (signed or unsigned) is not needed and never used — the app signs uploads server-side.
+- For local development, put the same variable in `.env.local` and restart `npm run dev`.
+
 Signed uploads organize media under `simz-naxty/audio`, `simz-naxty/covers`, `simz-naxty/artists` and `simz-naxty/playlists`. Cloudinary handles audio through its `video` upload endpoint and returns a secure delivery URL.
 
 No sample tracks or external media URLs are seeded. Until an admin publishes the first song, the public app intentionally shows a polished empty state: **No music yet. Check back soon.**
