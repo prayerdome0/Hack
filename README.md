@@ -57,9 +57,19 @@ image endpoint:
 
 ### No folders
 
-No `folder` parameter is ever sent, and any folder prefix in a requested
-`public_id` is stripped, so no `seedwell/images/...` style structure is created.
+No `folder` parameter is ever sent and no `public_id` is supplied, so Cloudinary
+assigns a root-level id and no `seedwell/images/...` style structure is created.
 The asset folder is not used as a public ID prefix.
+
+### Replacing media
+
+Cloudinary forces `overwrite=false` on unsigned uploads, and a preset with
+*Disallow public ID* rejects a caller-supplied `public_id` outright, so a
+replacement can never reuse the old id. Instead the client sends
+`replaces_public_id`; the route uploads the new file first and only then deletes
+the superseded asset with the signed Admin API. If the upload fails, the
+existing asset is left untouched; if the cleanup fails, it is logged under
+`[cloudinary_replace_cleanup]` and the upload still succeeds.
 
 ### Database records
 

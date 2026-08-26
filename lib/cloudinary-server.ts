@@ -146,15 +146,20 @@ export const isDevelopment = () => process.env.NODE_ENV !== 'production';
  * only `file` + `upload_preset=Seedwell` to the resource-type-specific
  * endpoint. No signature is generated, so the two modes are never mixed.
  *
- * No `folder` and no folder-prefixed `public_id` are sent, so Cloudinary
- * creates no folder structure.
+ * Note: an unsigned upload can never overwrite an existing asset — Cloudinary
+ * forces `overwrite=false` — and many presets also disallow a caller-supplied
+ * public_id. So no public_id is sent at all: Cloudinary assigns one, and
+ * replacing an asset is done by uploading the new file and then deleting the
+ * old one with the signed API (see `destroyAsset`).
+ *
+ * No `folder` is sent and no public_id is supplied, so Cloudinary creates no
+ * folder structure.
  */
 export async function unsignedUpload(options: {
   file: Blob;
   fileName: string;
   mimeType: string;
   resourceType: CloudinaryResourceType;
-  publicId?: string;
 }): Promise<Record<string, unknown>> {
   // CLOUDINARY_API_BASE_URL is a server-only test seam (integration tests point
   // it at a mock). It is unset in every real environment.
@@ -163,9 +168,6 @@ export async function unsignedUpload(options: {
   const form = new FormData();
   form.append('file', options.file, options.fileName);
   form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-  // `public_id` is accepted by an unsigned preset only when the preset allows
-  // it; it is sent without any folder prefix so no folders are created.
-  if (options.publicId) form.append('public_id', options.publicId);
 
   const baseFailure = {
     resourceType: options.resourceType,

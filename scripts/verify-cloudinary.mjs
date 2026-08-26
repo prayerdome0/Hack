@@ -144,6 +144,10 @@ function startMock() {
         if (fields.signature || fields.api_key) return json(401, { error: { message: 'Invalid Signature. String to sign - ...' } });
         if (!fields.upload_preset) return json(400, { error: { message: 'Upload preset must be specified when using unsigned upload' } });
         if (fields.folder) return json(400, { error: { message: 'folder is not allowed for this preset' } });
+        // A strict unsigned preset ("Disallow public ID") rejects a caller-supplied
+        // public_id, and unsigned uploads can never overwrite. Enforce both.
+        if (fields.public_id) return json(400, { error: { message: 'Public ID is not allowed for unsigned uploads with this preset' } });
+        if (fields.overwrite === 'true') return json(400, { error: { message: 'Parameter overwrite is not allowed for unsigned uploads' } });
         if (/MISSINGPRESET/.test(file.name)) return json(400, { error: { message: `Upload preset ${fields.upload_preset} not found` } });
         if (/SIGNEDPRESET/.test(file.name)) return json(400, { error: { message: 'Upload preset must be whitelisted for unsigned uploads' } });
         if (/HUGE/.test(file.name)) return json(400, { error: { message: 'File size too large. Got 20000000. Maximum is 10485760.' } });
@@ -232,6 +236,12 @@ check('no request sent a signature or api_key', () => {
 });
 check('no request sent a folder parameter', () => {
   for (const r of requests) assert.equal(r.fields.folder, undefined);
+});
+check('no request sent public_id or overwrite (illegal when unsigned)', () => {
+  for (const r of requests) {
+    assert.equal(r.fields.public_id, undefined, 'public_id sent on an unsigned upload');
+    assert.equal(r.fields.overwrite, undefined, 'overwrite sent on an unsigned upload');
+  }
 });
 check('no public_id contains a folder prefix', () => {
   for (const record of database) assert.ok(!record.cloudinaryPublicId.includes('/'), `folder in ${record.cloudinaryPublicId}`);
@@ -355,16 +365,36 @@ await checkAsync('route uploads audio through /video/upload', async () => {
   assert.equal(body.is_audio, true);
 });
 
-await checkAsync('route strips a folder prefix from public_id', async () => {
+await checkAsync('route never forwards a caller public_id to an unsigned upload', async () => {
   const form = new FormData();
   form.append('file', new File([Buffer.alloc(256, 1)], 'a.png', { type: 'image/png' }));
+  // Even if a caller supplies one, it must not reach Cloudinary: the strict
+  // preset in the mock rejects public_id outright.
   form.append('public_id', 'seedwell/images/nested/name');
   const response = await POST(new Request('http://localhost/api/cloudinary/upload', {
     method: 'POST', headers: { Authorization: 'Bearer t' }, body: form
   }));
   const body = await response.json();
-  assert.equal(response.status, 200);
-  assert.equal(body.public_id, 'name', 'folder prefix was not stripped');
+  assert.equal(response.status, 200, `upload rejected: ${body.error}`);
+  assert.ok(!String(body.public_id).includes('/'), 'a folder path reached the public id');
+  assert.notEqual(body.public_id, 'seedwell/images/nested/name');
+  assert.equal(requests.at(-1).fields.public_id, undefined, 'public_id was forwarded to Cloudinary');
+});
+
+await checkAsync('replacement uploads a new asset instead of overwriting', async () => {
+  const first = await POST(routeRequest('cover.png', 'image/png', Buffer.alloc(256, 1)));
+  const original = await first.json();
+
+  const form = new FormData();
+  form.append('file', new File([Buffer.alloc(300, 2)], 'cover-v2.png', { type: 'image/png' }));
+  form.append('replaces_public_id', original.public_id);
+  const second = await POST(new Request('http://localhost/api/cloudinary/upload', {
+    method: 'POST', headers: { Authorization: 'Bearer t' }, body: form
+  }));
+  const replacement = await second.json();
+  assert.equal(second.status, 200, `replacement failed: ${replacement.error}`);
+  assert.notEqual(replacement.public_id, original.public_id, 'unsigned upload cannot reuse a public id');
+  assert.ok(replacement.secure_url.startsWith('https://res.cloudinary.com/dhad95cch/image/upload/'));
 });
 
 await checkAsync('route returns the real Cloudinary message, not the generic one', async () => {

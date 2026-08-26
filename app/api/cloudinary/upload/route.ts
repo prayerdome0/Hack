@@ -14,6 +14,40 @@ import {
 } from '@/lib/cloudinary-shared';
 import { requireAdmin } from '@/lib/server-auth';
 
+/**
+ * Delete the asset a new upload has superseded. Deletion is a signed Admin
+ * operation, so it uses CLOUDINARY_URL. A cleanup failure must never fail the
+ * upload that already succeeded, so it is logged and swallowed.
+ */
+async function destroySupersededAsset(publicId: string, resourceType: CloudinaryResourceType) {
+  try {
+    const { getCloudinary } = await import('@/lib/cloudinary-server');
+    const cloudinary = await getCloudinary();
+    const outcome = (await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+      invalidate: true
+    })) as { result?: string };
+    if (outcome.result !== 'ok') {
+      console.warn(
+        '[cloudinary_replace_cleanup]',
+        JSON.stringify({ publicId, resourceType, cloudinaryResult: outcome.result ?? null })
+      );
+      return null;
+    }
+    return publicId;
+  } catch (error) {
+    console.warn(
+      '[cloudinary_replace_cleanup_failed]',
+      JSON.stringify({
+        publicId,
+        resourceType,
+        cloudinaryMessage: (error as { message?: string })?.message ?? 'unknown error'
+      })
+    );
+    return null;
+  }
+}
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -44,19 +78,23 @@ export async function POST(request: Request) {
     const size = checkFileSize({ name: fileName, size: file.size }, resourceType);
     if (!size.ok) throw new ApiError(413, size.message, 'file_too_large');
 
-    const requestedPublicId = form.get('public_id');
-    // Strip any folder prefix: this application never creates Cloudinary folders.
-    const publicId = typeof requestedPublicId === 'string' && requestedPublicId.trim()
-      ? requestedPublicId.trim().split('/').pop() || undefined
-      : undefined;
-
     const result = await unsignedUpload({
       file,
       fileName,
       mimeType: file.type,
-      resourceType,
-      publicId
+      resourceType
     });
+
+    // Replacing media: an unsigned upload cannot overwrite an existing asset
+    // (Cloudinary forces overwrite=false), so the new file gets a fresh public
+    // id and the superseded asset is deleted afterwards with the signed API.
+    // This runs only after Cloudinary confirmed the new upload, so a failed
+    // upload never destroys the existing asset.
+    const replaces = form.get('replaces_public_id');
+    let replacedPublicId: string | null = null;
+    if (typeof replaces === 'string' && replaces.trim() && replaces.trim() !== result.public_id) {
+      replacedPublicId = await destroySupersededAsset(replaces.trim(), resourceType);
+    }
 
     return NextResponse.json(
       {
@@ -70,7 +108,8 @@ export async function POST(request: Request) {
         height: result.height ?? null,
         original_filename: result.original_filename ?? fileName,
         created_at: result.created_at ?? new Date().toISOString(),
-        is_audio: isAudioFile({ name: fileName, type: file.type })
+        is_audio: isAudioFile({ name: fileName, type: file.type }),
+        replaced_public_id: replacedPublicId
       },
       { headers: { 'Cache-Control': 'no-store' } }
     );

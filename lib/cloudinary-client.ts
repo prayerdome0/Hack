@@ -65,7 +65,7 @@ export async function uploadToCloudinary(
   _legacyFolder: string | undefined,
   token: string,
   onProgress?: (progress: number) => void,
-  publicId?: string,
+  replacesPublicId?: string,
   uploadedBy?: string
 ): Promise<UploadResult> {
   // Enforce the application's upload limit before a byte leaves the browser.
@@ -75,7 +75,10 @@ export async function uploadToCloudinary(
 
   const form = new FormData();
   form.append('file', file);
-  if (publicId) form.append('public_id', publicId);
+  // Unsigned uploads cannot overwrite an existing asset, so a replacement is
+  // uploaded under a new public id and the superseded asset is deleted
+  // server-side only after the new upload succeeds.
+  if (replacesPublicId) form.append('replaces_public_id', replacesPublicId);
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
