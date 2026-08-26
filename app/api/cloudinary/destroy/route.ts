@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { requireAdmin, apiError } from '@/lib/server-auth';
+import { requireUser, apiError } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    await requireAdmin(request);
+    await requireUser(request);
     const body = await request.json() as { publicId?: string; resourceType?: 'image' | 'video' };
     if (!body.publicId || !body.publicId.startsWith('simz-naxty/')) return new Response('Invalid public id', { status: 400 });
     const cloudinary = await import('cloudinary');
