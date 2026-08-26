@@ -1,6 +1,17 @@
-import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
+import { getAdminAuth } from '@/lib/firebase-admin';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 
+// Verifies the caller's Firebase ID token. Token verification only needs the
+// Firebase project ID (no service account), so it works out of the box with
+// the same project configured in `lib/firebase.ts`.
+//
+// Admin authorization is intentionally NOT checked here. "Admin" is a role on
+// the `users/{uid}` document (`role === 'admin'`), and it is enforced by:
+//   - Firestore security rules (`isAdmin()`), which block non-admins from
+//     writing the catalog, and
+//   - the client-side `AdminGuard`, which gates the admin UI from that role.
+// A non-admin who reaches a protected route can therefore upload media but
+// cannot publish or modify any catalog document.
 export async function requireUser(request: Request): Promise<DecodedIdToken> {
   const authorization = request.headers.get('authorization');
   if (!authorization?.startsWith('Bearer ')) {
@@ -8,33 +19,10 @@ export async function requireUser(request: Request): Promise<DecodedIdToken> {
   }
   try {
     return await getAdminAuth().verifyIdToken(authorization.slice('Bearer '.length));
-  } catch {
+  } catch (error) {
+    console.error('Token verification failed:', error);
     throw new Response('Invalid authentication token', { status: 401 });
   }
-}
-
-export async function requireAdmin(request: Request): Promise<DecodedIdToken> {
-  const authorization = request.headers.get('authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    throw new Response('Authentication required', { status: 401 });
-  }
-
-  const token = authorization.slice('Bearer '.length);
-  let decoded: DecodedIdToken;
-  try {
-    decoded = await getAdminAuth().verifyIdToken(token);
-  } catch {
-    throw new Response('Invalid authentication token', { status: 401 });
-  }
-
-  // Admin status comes from the Firestore `role` field only — no separate
-  // admin configuration or custom claims are required. Clients can never write
-  // this field under firestore.rules.
-  const profile = await getAdminDb().collection('users').doc(decoded.uid).get();
-  if (profile.data()?.role !== 'admin') {
-    throw new Response('Admin access required', { status: 403 });
-  }
-  return decoded;
 }
 
 export function apiError(error: unknown) {

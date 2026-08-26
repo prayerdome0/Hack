@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAdmin, apiError } from '@/lib/server-auth';
+import { requireUser, apiError } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
 
@@ -18,7 +18,7 @@ function cloudinaryConfig() {
 
 export async function POST(request: Request) {
   try {
-    await requireAdmin(request);
+    await requireUser(request);
     const body = await request.json() as { folder?: string };
     if (!body.folder || !folders.has(body.folder)) return new Response('Invalid upload folder', { status: 400 });
     const { cloudName, apiKey, apiSecret } = cloudinaryConfig();

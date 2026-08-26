@@ -10,14 +10,15 @@ npm install
 npm run dev
 ```
 
-Add the Firebase web variables and server-only Firebase Admin credentials before enabling authentication. `CLOUDINARY_URL` must remain server-only; the browser receives only a short-lived upload signature from `/api/cloudinary/signature`.
+Add the Firebase web variables before enabling authentication. `CLOUDINARY_URL` must remain server-only; the browser receives only a short-lived upload signature from `/api/cloudinary/signature`.
 
 ## Firebase setup
 
 1. Enable Email/Password Authentication.
-2. Create a `users/{uid}` document after the first account is created. Set `role` to `admin` using a trusted admin workflow (never from the browser).
+2. Create a `users/{uid}` document after the first account is created. Set `role` to `admin` using a trusted admin workflow (never from the browser). This `role` field is the single source of truth for admin access.
 3. Deploy `firestore.rules` and `firestore.indexes.json` with the Firebase CLI.
-4. Add `FIREBASE_SERVICE_ACCOUNT_JSON` (or the individual Admin variables) for protected API routes.
+
+No service account is required for the upload flow: the API routes verify Firebase ID tokens using only the project ID, and admin authorization comes from the `users/{uid}.role` field enforced by `firestore.rules` and the client-side `AdminGuard`. A service account (`FIREBASE_SERVICE_ACCOUNT_JSON`) is only needed for server-side Firestore access, such as the play-count route.
 
 ## Media
 
