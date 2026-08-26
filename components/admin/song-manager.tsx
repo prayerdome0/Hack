@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import { useAuth } from '@/components/providers/auth-provider';
 import { createDocument, removeDocument, updateDocument, firestoreHelpers } from '@/lib/firestore';
 import { uploadToCloudinary } from '@/lib/cloudinary-client';
-import { CLOUDINARY_FOLDERS } from '@/lib/cloudinary-folders';
 import type { Album, Artist, Song } from '@/lib/types';
 import { formatDate, formatDuration } from '@/lib/utils';
 import { Artwork } from '@/components/ui/artwork';
@@ -87,12 +86,12 @@ function SongEditor({ open, song, artists, albums, onClose, onSaved }: { open: b
       let coverPublicId = song?.coverPublicId;
       if (audioFile) {
         validateFile(audioFile, 'audio');
-        const result = await uploadToCloudinary(audioFile, CLOUDINARY_FOLDERS.audio, token, (value) => setProgress((old) => ({ ...old, audio: value })));
+        const result = await uploadToCloudinary(audioFile, undefined, token, (value) => setProgress((old) => ({ ...old, audio: value })), song?.audioPublicId);
         audioUrl = result.secure_url; audioPublicId = result.public_id; duration = result.duration || duration;
       }
       if (coverFile) {
         validateFile(coverFile, 'image');
-        const result = await uploadToCloudinary(coverFile, CLOUDINARY_FOLDERS.covers, token, (value) => setProgress((old) => ({ ...old, cover: value })));
+        const result = await uploadToCloudinary(coverFile, undefined, token, (value) => setProgress((old) => ({ ...old, cover: value })), song?.coverPublicId);
         coverUrl = result.secure_url; coverPublicId = result.public_id;
       }
       if (!audioUrl || !coverUrl) throw new Error('Audio and cover artwork are required.');
