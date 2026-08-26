@@ -52,8 +52,11 @@ function containsPlaceholder(value: string) {
   return /[<>]|your[_ -]?(api|cloud|secret)/i.test(value);
 }
 
-const PLACEHOLDER_GUIDE =
+const SIGNED_PLACEHOLDER_GUIDE =
   'Cloudinary console → Settings (gear) → API Keys shows the finished value. Copy the CLOUDINARY_URL value as-is into your server environment variables.';
+
+const UNSIGNED_PLACEHOLDER_GUIDE =
+  'Set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME to your Cloudinary cloud name and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET to an unsigned upload preset (Cloudinary console → Settings → Upload).';
 
 /**
  * Computes a Cloudinary upload signature.
@@ -89,7 +92,7 @@ export function getCloudinaryConfig(
   if (rawUrl) {
     if (containsPlaceholder(rawUrl)) {
       throw new CloudinaryConfigurationError(
-        'CLOUDINARY_URL still contains placeholder text. ' + PLACEHOLDER_GUIDE
+        'CLOUDINARY_URL still contains placeholder text. ' + SIGNED_PLACEHOLDER_GUIDE
       );
     }
     try {
@@ -119,7 +122,7 @@ export function getCloudinaryConfig(
     if ([cloudName, apiKey, apiSecret].some(containsPlaceholder)) {
       throw new CloudinaryConfigurationError(
         'Cloudinary environment variables still contain placeholder text. ' +
-          PLACEHOLDER_GUIDE
+          SIGNED_PLACEHOLDER_GUIDE
       );
     }
     return { cloudName, apiKey, apiSecret };
@@ -147,28 +150,14 @@ export type CloudinaryUploadStatus =
 /**
  * Reports how media uploads are configured for this deployment.
  *
- * Signed uploads (server-side CLOUDINARY_URL) are preferred because they need
- * no unsigned preset and keep the API secret on the server. Unsigned uploads
- * (NEXT_PUBLIC_CLOUDINARY_* variables) are a supported fallback.
+ * Unsigned uploads (NEXT_PUBLIC_CLOUDINARY_* variables) are the primary mode
+ * because they post directly from the browser without a server round-trip.
+ * Signed uploads (server-side CLOUDINARY_URL) are a supported fallback.
  */
 export function getUploadStatus(environment?: CloudinaryEnvironment): CloudinaryUploadStatus {
   const env = environment || (process.env as CloudinaryEnvironment);
 
-  // 1) Signed uploads — preferred
-  try {
-    const config = getCloudinaryConfig(env);
-    return { configured: true, mode: 'signed', cloudName: config.cloudName };
-  } catch (error) {
-    // Keep going; unsigned may still be configured.
-    if (error instanceof CloudinaryConfigurationError) {
-      // Placeholder text in CLOUDINARY_URL is worth surfacing verbatim.
-      if (containsPlaceholder(cleanEnvironmentValue(env.CLOUDINARY_URL))) {
-        return { configured: false, mode: 'none', message: error.message };
-      }
-    }
-  }
-
-  // 2) Unsigned uploads — fallback
+  // 1) Unsigned uploads — primary mode
   const cloudName = env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
   const uploadPreset = env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
 
@@ -178,7 +167,7 @@ export function getUploadStatus(environment?: CloudinaryEnvironment): Cloudinary
       mode: 'none',
       message:
         'NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME still contains placeholder text. ' +
-        PLACEHOLDER_GUIDE
+        UNSIGNED_PLACEHOLDER_GUIDE
     };
   }
 
@@ -188,7 +177,7 @@ export function getUploadStatus(environment?: CloudinaryEnvironment): Cloudinary
       mode: 'none',
       message:
         'NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET still contains placeholder text. ' +
-        PLACEHOLDER_GUIDE
+        UNSIGNED_PLACEHOLDER_GUIDE
     };
   }
 
@@ -196,11 +185,25 @@ export function getUploadStatus(environment?: CloudinaryEnvironment): Cloudinary
     return { configured: true, mode: 'unsigned', cloudName };
   }
 
+  // 2) Signed uploads — fallback when no unsigned preset is configured
+  try {
+    const config = getCloudinaryConfig(env);
+    return { configured: true, mode: 'signed', cloudName: config.cloudName };
+  } catch (error) {
+    // Keep going; nothing usable may still be reported below.
+    if (error instanceof CloudinaryConfigurationError) {
+      // Placeholder text in CLOUDINARY_URL is worth surfacing verbatim.
+      if (containsPlaceholder(cleanEnvironmentValue(env.CLOUDINARY_URL))) {
+        return { configured: false, mode: 'none', message: error.message };
+      }
+    }
+  }
+
   // 3) Nothing usable configured
   return {
     configured: false,
     mode: 'none',
     message:
-      'Media uploads are not configured. Set CLOUDINARY_URL on the server (recommended) or NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME + NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET, then redeploy.'
+      'Media uploads are not configured. Set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET for unsigned uploads (or CLOUDINARY_URL on the server), then redeploy.'
   };
 }

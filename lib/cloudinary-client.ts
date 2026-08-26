@@ -12,22 +12,22 @@ type SignResponse = {
 
 type CloudinaryErrorPayload = { error?: { message?: string } };
 
+const NOT_CONFIGURED_MESSAGE =
+  'Media uploads are not configured. Set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and ' +
+  'NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET for unsigned uploads (or CLOUDINARY_URL on ' +
+  'the server as a fallback), then redeploy.';
+
 /**
  * Reads the unsigned-upload configuration from public environment variables.
- * Unlike signed uploads, unsigned uploads need a pre-configured unsigned
- * preset on the Cloudinary account, so this path is only a fallback and is
- * reported clearly when the variables are missing.
+ * Unsigned uploads post directly from the browser using a pre-configured
+ * unsigned upload preset — no API key or secret, and no server round-trip.
+ * Returns null when the variables are not set.
  */
-function getUnsignedConfig() {
+function tryGetUnsignedConfig(): { cloudName: string; uploadPreset: string } | null {
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
   const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
 
-  if (!cloudName || !uploadPreset) {
-    throw new Error(
-      'Media uploads are not configured. Set CLOUDINARY_URL on the server (recommended) or NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME + NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET, then redeploy.'
-    );
-  }
-
+  if (!cloudName || !uploadPreset) return null;
   return { cloudName, uploadPreset };
 }
 
@@ -38,7 +38,7 @@ function describeCloudinaryError(message: string) {
   if (normalized.includes('unsigned')) {
     return (
       'The Cloudinary upload preset is not enabled for unsigned uploads. ' +
-      'Use CLOUDINARY_URL on the server instead, or mark the preset as unsigned in the Cloudinary dashboard.'
+      'Mark it as unsigned in Cloudinary console → Settings → Upload, and check the preset name.'
     );
   }
   if (normalized.includes('too large') || normalized.includes('exceeds')) {
@@ -78,7 +78,7 @@ function uploadFile(
       reject(
         new Error(
           'The media upload failed. Check your connection and try again. ' +
-            'If this keeps happening, make sure CLOUDINARY_URL is configured on the server and redeploy.'
+            'If this keeps happening, make sure your Cloudinary upload settings are configured and redeploy.'
         )
       );
     };
@@ -97,7 +97,7 @@ function uploadFile(
         reject(
           new Error(
             'The media upload failed. The request never reached the media service. ' +
-              'Check your connection, or configure CLOUDINARY_URL on the server and try again.'
+              'Check your connection and try again.'
           )
         );
         return;
@@ -161,14 +161,17 @@ function buildUnsignedFormData(file: File, uploadPreset: string, folder?: string
 /**
  * Uploads a file to Cloudinary.
  *
- * Preferred flow: the server signs the request (signed uploads need no
- * unsigned preset and keep the API secret server-side). If the server has no
- * Cloudinary credentials configured, we fall back to an unsigned upload using
- * the NEXT_PUBLIC_CLOUDINARY_* variables.
+ * Default mode: unsigned upload — the file is posted straight to Cloudinary
+ * using the public cloud name and unsigned upload preset from
+ * NEXT_PUBLIC_CLOUDINARY_* (no server involved, no API key or secret needed).
+ *
+ * Fallback: when those variables are unset and the server has CLOUDINARY_URL
+ * configured, a signed upload request is used instead (the server signs the
+ * request and the secret never reaches the browser).
  *
  * @param file     The file to upload.
  * @param folder   Optional Cloudinary folder path (e.g. `simz-naxty/audio`).
- * @param token    Optional Firebase ID token used to sign the upload server-side.
+ * @param token    Optional Firebase ID token, only needed for the signed fallback.
  * @param onProgress Callback receiving upload progress (0–100).
  */
 export async function uploadToCloudinary(
@@ -179,25 +182,19 @@ export async function uploadToCloudinary(
 ): Promise<UploadResult> {
   const resourceType = resourceTypeFor(file);
 
-  if (token) {
-    try {
-      const signed = await requestSignedUpload(token, folder);
-      const formData = buildSignedFormData(file, signed);
-      return await uploadFile(
-        file,
-        { cloudName: signed.cloudName, resourceType, formData },
-        onProgress
-      );
-    } catch (error) {
-      // Only fall back to unsigned when the server has no Cloudinary
-      // credentials at all. Any other error (auth, network) is rethrown.
-      if ((error as { code?: string })?.code !== 'cloudinary_not_configured') {
-        throw error;
-      }
-    }
+  // 1) Unsigned upload — the default mode.
+  const unsigned = tryGetUnsignedConfig();
+  if (unsigned) {
+    const formData = buildUnsignedFormData(file, unsigned.uploadPreset, folder);
+    return uploadFile(file, { cloudName: unsigned.cloudName, resourceType, formData }, onProgress);
   }
 
-  const { cloudName, uploadPreset } = getUnsignedConfig();
-  const formData = buildUnsignedFormData(file, uploadPreset, folder);
-  return uploadFile(file, { cloudName, resourceType, formData }, onProgress);
+  // 2) Signed upload — fallback when unsigned variables are absent.
+  if (token) {
+    const signed = await requestSignedUpload(token, folder);
+    const formData = buildSignedFormData(file, signed);
+    return uploadFile(file, { cloudName: signed.cloudName, resourceType, formData }, onProgress);
+  }
+
+  throw new Error(NOT_CONFIGURED_MESSAGE);
 }

@@ -77,7 +77,7 @@ function SettingsContent() {
                 state: 'warning',
                 detail:
                   payload.message ||
-                  'Set CLOUDINARY_URL on the server (or configure unsigned uploads) and redeploy',
+                  'Set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET and redeploy',
                 authorized: true
               }
         );
@@ -196,9 +196,11 @@ function SettingsContent() {
         </div>
         <ul className="mt-6 grid gap-4 text-sm leading-6 text-white/50 md:grid-cols-3">
           <li>
-            Uploads are signed server-side with{' '}
-            <code className="text-gold/80">CLOUDINARY_URL</code> — the API secret never
-            reaches the browser. The unsigned preset path is only a fallback.
+            Uploads use an unsigned preset straight from the browser —{' '}
+            <code className="text-gold/80">NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</code> and{' '}
+            <code className="text-gold/80">NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET</code>.
+            Signed uploads (<code className="text-gold/80">CLOUDINARY_URL</code>) remain a
+            fallback.
           </li>
           <li>
             Firestore rules protect favorites, playlists and listening history by Firebase
