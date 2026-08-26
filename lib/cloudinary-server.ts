@@ -1,4 +1,5 @@
 import { ApiError } from '@/lib/api-error';
+import { DEFAULT_CLOUDINARY_CONFIG } from '@/lib/cloudinary-defaults';
 
 type CloudinaryEnvironment = {
   NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?: string;
@@ -57,16 +58,18 @@ const PLACEHOLDER_GUIDE =
  * Checks whether the unsigned upload configuration is present.
  * Uploads only need NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and
  * NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET — no API key or secret required.
+ * When the variables are unset, the shipped defaults from
+ * `lib/cloudinary-defaults.ts` are used (mirroring the Firebase defaults).
  */
 export function getUnsignedUploadStatus(
   environment?: CloudinaryEnvironment
 ): { configured: boolean; cloudName?: string; message?: string } {
   const env = environment || (process.env as CloudinaryEnvironment);
 
-  const cloudName = env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
-  const uploadPreset = env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
+  const envCloudName = env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
+  const envUploadPreset = env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
 
-  if (cloudName && containsPlaceholder(cloudName)) {
+  if (envCloudName && containsPlaceholder(envCloudName)) {
     return {
       configured: false,
       message:
@@ -75,7 +78,7 @@ export function getUnsignedUploadStatus(
     };
   }
 
-  if (uploadPreset && containsPlaceholder(uploadPreset)) {
+  if (envUploadPreset && containsPlaceholder(envUploadPreset)) {
     return {
       configured: false,
       message:
@@ -84,13 +87,8 @@ export function getUnsignedUploadStatus(
     };
   }
 
-  if (!cloudName && !uploadPreset) {
-    return {
-      configured: false,
-      message:
-        'Media uploads are not configured. Set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET as environment variables, then redeploy.'
-    };
-  }
+  const cloudName = envCloudName || DEFAULT_CLOUDINARY_CONFIG.cloudName;
+  const uploadPreset = envUploadPreset || DEFAULT_CLOUDINARY_CONFIG.uploadPreset;
 
   if (!cloudName) {
     return {
