@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
+import { apiError } from '@/lib/api-error';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { requireUser, apiError } from '@/lib/server-auth';
+import { requireUser } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
 
