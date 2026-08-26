@@ -1,24 +1,21 @@
 import type { UploadResult } from '@/lib/types';
+import { DEFAULT_CLOUDINARY_CONFIG } from '@/lib/cloudinary-defaults';
 
 /**
  * Reads the Cloudinary cloud name and upload preset from public environment
- * variables. Unsigned uploads do not need an API key or secret — only the
- * cloud name and a pre-configured unsigned upload preset.
+ * variables, falling back to the shipped defaults (see
+ * `lib/cloudinary-defaults.ts`) when they are not set. Unsigned uploads do
+ * not need an API key or secret — only the cloud name and a pre-configured
+ * unsigned upload preset.
  */
 function getUnsignedConfig() {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
-  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
+  const cloudName =
+    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim() ||
+    DEFAULT_CLOUDINARY_CONFIG.cloudName;
+  const uploadPreset =
+    process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim() ||
+    DEFAULT_CLOUDINARY_CONFIG.uploadPreset;
 
-  if (!cloudName) {
-    throw new Error(
-      'NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is not set. Add it to your environment variables.'
-    );
-  }
-  if (!uploadPreset) {
-    throw new Error(
-      'NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET is not set. Create an unsigned upload preset in your Cloudinary dashboard and add it to your environment variables.'
-    );
-  }
   return { cloudName, uploadPreset };
 }
 
