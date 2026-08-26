@@ -18,7 +18,7 @@ Cloudinary is configured with one **server-only** variable. In local development
 CLOUDINARY_URL=cloudinary://YOUR_API_KEY:YOUR_API_SECRET@dhad95cch
 ```
 
-Do not set or require `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, or any `NEXT_PUBLIC_CLOUDINARY_*` variables. Uploads are proxied through the authenticated server route, which initializes the Cloudinary SDK from `process.env.CLOUDINARY_URL`. The API key, secret and URL never enter the browser bundle. The existing unsigned upload preset `Seedwell` is supplied to the SDK, without creating Cloudinary folders.
+Do not set or require `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, or any `NEXT_PUBLIC_CLOUDINARY_*` variables. Uploads are proxied through the authenticated server route, which initializes the Cloudinary SDK from `process.env.CLOUDINARY_URL` and performs authenticated uploads. The API key, secret and URL never enter the browser bundle. No upload preset is required, so the upload does not depend on an unsigned preset or create Cloudinary folders.
 
 Images use Cloudinary's image resource type, video and audio use video, and PDFs/documents use raw. The same server configuration supports upload, replacement/overwrite, download URLs returned by Cloudinary, and deletion. If `CLOUDINARY_URL` is missing or malformed, API routes return a clear server-side configuration error and the Settings health check reports it.
 
