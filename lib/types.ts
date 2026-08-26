@@ -76,10 +76,41 @@ export interface RecentlyPlayed {
   playCount?: number;
 }
 
+export interface UploadMetadata {
+  cloudinaryPublicId: string;
+  cloudinaryUrl: string;
+  resourceType: 'image' | 'video' | 'raw';
+  format?: string;
+  fileSize?: number;
+  uploadedBy?: string;
+  uploadedAt?: string;
+  relatedId?: string;
+}
+
+export interface ImageMetadata extends UploadMetadata {
+  resourceType: 'image';
+  format?: 'jpg' | 'png' | 'webp' | 'gif' | 'svg';
+}
+
+export interface AudioMetadata extends UploadMetadata {
+  resourceType: 'video'; // Audio uploaded as video resource type
+  duration?: number;
+  format?: string;
+}
+
+export interface DocumentMetadata extends UploadMetadata {
+  resourceType: 'raw';
+  format?: string;
+  pageCount?: number;
+}
+
+export type FileMetadata = ImageMetadata | AudioMetadata | DocumentMetadata;
+
 export interface UploadResult {
   secure_url: string;
   public_id: string;
   duration?: number;
   resource_type: string;
   bytes: number;
+  format?: string;
 }

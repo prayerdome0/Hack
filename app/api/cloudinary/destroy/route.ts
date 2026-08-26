@@ -11,11 +11,11 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       publicId?: string;
-      resourceType?: 'image' | 'video';
+      resourceType?: 'image' | 'video' | 'raw';
     };
-    if (!body.publicId || !body.publicId.startsWith('simz-naxty/')) {
+    if (!body.publicId) {
       return NextResponse.json(
-        { error: 'Invalid public id', code: 'invalid_public_id' },
+        { error: 'Public id is required', code: 'missing_public_id' },
         { status: 400 }
       );
     }
