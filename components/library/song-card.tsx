@@ -19,7 +19,7 @@ export function SongCard({ song, queue = [], compact = false }: { song: Song; qu
 
   if (compact) return <SongRow song={song} queue={queue} />;
   return (
-    <article className="group relative min-w-0">
+    <article className="page-enter group relative min-w-0">
       <div className="relative aspect-square overflow-hidden rounded-2xl bg-panel2 shadow-card">
         <Artwork src={song.coverUrl} title={song.title} alt={`${song.title} cover`} size="lg" rounded="rounded-none" className="h-full w-full transition duration-500 group-hover:scale-[1.03]" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/0 to-transparent opacity-70" />
