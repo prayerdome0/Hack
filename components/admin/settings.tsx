@@ -159,10 +159,10 @@ function SettingsContent() {
           </div>
           <div className="mt-6 space-y-2">
             {[
-              'simz-naxty/audio/',
-              'simz-naxty/covers/',
-              'simz-naxty/artists/',
-              'simz-naxty/playlists/'
+              'root/',
+              'root/covers/',
+              'root/artists/',
+              'root/playlists/'
             ].map((folder) => (
               <div
                 key={folder}

@@ -86,12 +86,12 @@ function SongEditor({ open, song, artists, albums, onClose, onSaved }: { open: b
       let coverPublicId = song?.coverPublicId;
       if (audioFile) {
         validateFile(audioFile, 'audio');
-        const result = await uploadToCloudinary(audioFile, 'simz-naxty/audio', token, (value) => setProgress((old) => ({ ...old, audio: value })));
+        const result = await uploadToCloudinary(audioFile, undefined, token, (value) => setProgress((old) => ({ ...old, audio: value })));
         audioUrl = result.secure_url; audioPublicId = result.public_id; duration = result.duration || duration;
       }
       if (coverFile) {
         validateFile(coverFile, 'image');
-        const result = await uploadToCloudinary(coverFile, 'simz-naxty/covers', token, (value) => setProgress((old) => ({ ...old, cover: value })));
+        const result = await uploadToCloudinary(coverFile, undefined, token, (value) => setProgress((old) => ({ ...old, cover: value })));
         coverUrl = result.secure_url; coverPublicId = result.public_id;
       }
       if (!audioUrl || !coverUrl) throw new Error('Audio and cover artwork are required.');
