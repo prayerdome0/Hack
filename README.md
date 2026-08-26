@@ -1,1 +1,26 @@
-# Hack
+# SIMZ NAXTY
+
+Production-minded music streaming application built with Next.js, TypeScript, Tailwind CSS, Firebase Authentication, Firestore and signed Cloudinary uploads.
+
+## Run locally
+
+```bash
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Add the Firebase web variables and server-only Firebase Admin credentials before enabling authentication. `CLOUDINARY_URL` must remain server-only; the browser receives only a short-lived upload signature from `/api/cloudinary/signature`.
+
+## Firebase setup
+
+1. Enable Email/Password Authentication.
+2. Create a `users/{uid}` document after the first account is created. Set `role` to `admin` using a trusted admin workflow (never from the browser).
+3. Deploy `firestore.rules` and `firestore.indexes.json` with the Firebase CLI.
+4. Add `FIREBASE_SERVICE_ACCOUNT_JSON` (or the individual Admin variables) for protected API routes.
+
+## Media
+
+Signed uploads organize audio and images under `simz-naxty/audio`, `simz-naxty/covers`, `simz-naxty/artists` and `simz-naxty/playlists`. Audio is sent to Cloudinary's `video` upload endpoint, which supports common audio formats and returns a secure URL.
+
+No sample tracks or external media URLs are seeded. Until an admin publishes the first song, the public app intentionally shows a polished empty state: **No music yet. Check back soon.**
