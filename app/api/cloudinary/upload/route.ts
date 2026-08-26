@@ -19,11 +19,27 @@ export async function POST(request: Request) {
     const publicId = form.get('public_id');
     const result = await new Promise<Record<string, unknown>>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { resource_type: resourceType, upload_preset: 'Seedwell', overwrite: true, ...(typeof publicId === 'string' && publicId ? { public_id: publicId } : {}) },
+        {
+          // CLOUDINARY_URL configures an authenticated (signed) upload. Do not
+          // also force an unsigned preset here: unsigned presets can reject
+          // signed-only parameters such as public_id and overwrite.
+          resource_type: resourceType,
+          overwrite: true,
+          ...(typeof publicId === 'string' && publicId ? { public_id: publicId } : {})
+        },
         (error, uploaded) => error ? reject(error) : resolve(uploaded as Record<string, unknown>)
       );
       stream.end(buffer);
     });
     return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    // Preserve our own auth/configuration errors and translate only provider
+    // errors. The response deliberately excludes the SDK error object and
+    // request details.
+    if (error instanceof ApiError) return apiError(error);
+    if (error instanceof Error && error.message) {
+      return apiError(new ApiError(502, error.message, 'cloudinary_upload_failed'));
+    }
+    return apiError(error);
+  }
 }

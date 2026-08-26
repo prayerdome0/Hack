@@ -179,7 +179,7 @@ function SettingsContent() {
         </div>
         <ul className="mt-6 grid gap-4 text-sm leading-6 text-white/50 md:grid-cols-3">
           <li>
-            Uploads are proxied through the server. Only the server-only <code className="text-gold/80">CLOUDINARY_URL</code> is used; its credentials never reach the browser. The existing <code className="text-gold/80">Seedwell</code> preset is used for uploads.
+            Uploads are proxied through the server using authenticated Cloudinary uploads. Only the server-only <code className="text-gold/80">CLOUDINARY_URL</code> is used; its credentials never reach the browser. No upload preset is required.
           </li>
           <li>
             Firestore rules protect favorites, playlists and listening history by Firebase
@@ -193,11 +193,11 @@ function SettingsContent() {
         </ul>
         <div className="mt-6 flex flex-wrap gap-5">
           <Link
-            href="https://cloudinary.com/documentation/upload_presets#unsigned_upload_presets"
+            href="https://cloudinary.com/documentation/image_upload_api_reference"
             target="_blank"
             className="inline-flex items-center gap-2 text-xs font-semibold text-gold hover:text-gold-bright"
           >
-            Unsigned upload presets guide <ExternalLink className="h-3.5 w-3.5" />
+            Cloudinary upload API guide <ExternalLink className="h-3.5 w-3.5" />
           </Link>
           <Link
             href="https://firebase.google.com/docs/firestore/security/get-started"

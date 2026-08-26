@@ -1,16 +1,34 @@
 import type { UploadResult } from '@/lib/types';
 
-type CloudinaryErrorPayload = { error?: string; message?: string };
+type CloudinaryErrorPayload = {
+  error?: string | { message?: unknown };
+  message?: string;
+};
 
 function describeError(message: string) {
-  const normalized = message.toLowerCase();
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return 'Cloudinary rejected this upload. Try again or check the Cloudinary account configuration.';
   if (normalized.includes('unsigned') || normalized.includes('upload preset')) {
-    return 'The Cloudinary upload preset Seedwell is not available for this file. Check the preset in Cloudinary console.';
+    return 'Cloudinary upload configuration rejected this file. Check the Cloudinary account configuration.';
   }
   if (normalized.includes('too large') || normalized.includes('exceeds')) {
     return 'That file is too large for this Cloudinary plan. Try a smaller file.';
   }
-  return `Cloudinary rejected this upload: ${message}`;
+  // Avoid displaying the same prefix twice when an API already returns a
+  // human-readable Cloudinary error.
+  return normalized.startsWith('cloudinary rejected this upload:')
+    ? message.trim()
+    : `Cloudinary rejected this upload: ${message.trim()}`;
+}
+
+function errorMessage(payload: CloudinaryErrorPayload | undefined) {
+  const providerError = payload?.error;
+  if (typeof providerError === 'string') return providerError;
+  if (providerError && typeof providerError === 'object' && 'message' in providerError) {
+    const message = (providerError as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+  }
+  return typeof payload?.message === 'string' ? payload.message : '';
 }
 
 /**
@@ -46,7 +64,7 @@ export async function uploadToCloudinary(
         resolve(payload);
         return;
       }
-      const message = payload?.error || payload?.message || 'Cloudinary rejected this upload.';
+      const message = errorMessage(payload);
       reject(new Error(describeError(message)));
     };
     xhr.send(form);
