@@ -1,17 +1,38 @@
 import { NextResponse } from 'next/server';
-import { requireUser, apiError } from '@/lib/server-auth';
+import { apiError } from '@/lib/api-error';
+import { getCloudinaryConfig } from '@/lib/cloudinary-server';
+import { requireAdmin } from '@/lib/server-auth';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    await requireUser(request);
-    const body = await request.json() as { publicId?: string; resourceType?: 'image' | 'video' };
-    if (!body.publicId || !body.publicId.startsWith('simz-naxty/')) return new Response('Invalid public id', { status: 400 });
+    await requireAdmin(request);
+
+    const body = (await request.json()) as {
+      publicId?: string;
+      resourceType?: 'image' | 'video';
+    };
+    if (!body.publicId || !body.publicId.startsWith('simz-naxty/')) {
+      return NextResponse.json(
+        { error: 'Invalid public id', code: 'invalid_public_id' },
+        { status: 400 }
+      );
+    }
+
+    const { cloudName, apiKey, apiSecret } = getCloudinaryConfig();
     const cloudinary = await import('cloudinary');
-    cloudinary.v2.config({ cloudinary_url: process.env.CLOUDINARY_URL, secure: true });
-    const result = await cloudinary.v2.uploader.destroy(body.publicId, { resource_type: body.resourceType || 'image', invalidate: true });
-    return NextResponse.json(result);
+    cloudinary.v2.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret,
+      secure: true
+    });
+    const result = await cloudinary.v2.uploader.destroy(body.publicId, {
+      resource_type: body.resourceType || 'image',
+      invalidate: true
+    });
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return apiError(error);
   }

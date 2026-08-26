@@ -37,9 +37,9 @@ function getAdminApp() {
   }
 
   // No service account available. Initializing with just the project ID is
-  // enough to verify Firebase ID tokens (which is the only thing the upload
-  // flow needs) — admin authorization comes from the `users/{uid}.role` field,
-  // enforced by Firestore security rules, not from a server-side credential.
+  // enough to verify Firebase ID tokens. Media routes then read the caller's
+  // own `users/{uid}.role` through the Firestore REST API, where security rules
+  // apply, so upload authorization still needs no server-side credential.
   adminApp = initializeApp({ projectId });
   return adminApp;
 }
