@@ -1,65 +1,42 @@
 import type { UploadResult } from '@/lib/types';
 
-export type CloudinaryFolder =
-  | 'simz-naxty/audio'
-  | 'simz-naxty/covers'
-  | 'simz-naxty/artists'
-  | 'simz-naxty/playlists';
+/**
+ * Reads the Cloudinary cloud name and upload preset from public environment
+ * variables. Unsigned uploads do not need an API key or secret — only the
+ * cloud name and a pre-configured unsigned upload preset.
+ */
+function getUnsignedConfig() {
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
 
-type UploadSignature = {
-  signature: string;
-  timestamp: number;
-  apiKey: string;
-  cloudName: string;
-  folder: string;
-};
-
-async function responseError(response: Response, fallback: string) {
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    try {
-      const payload = (await response.json()) as { error?: unknown; message?: unknown };
-      if (typeof payload.error === 'string' && payload.error) return payload.error;
-      if (typeof payload.message === 'string' && payload.message) return payload.message;
-    } catch {
-      return fallback;
-    }
-  } else if (!contentType || contentType.includes('text/plain')) {
-    const message = await response.text().catch(() => '');
-    if (message.trim()) return message.trim().slice(0, 500);
+  if (!cloudName) {
+    throw new Error(
+      'NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME is not set. Add it to your environment variables.'
+    );
   }
-  return fallback;
-}
-
-function isUploadSignature(value: unknown): value is UploadSignature {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<UploadSignature>;
-  return (
-    typeof candidate.signature === 'string' &&
-    typeof candidate.timestamp === 'number' &&
-    typeof candidate.apiKey === 'string' &&
-    typeof candidate.cloudName === 'string' &&
-    typeof candidate.folder === 'string'
-  );
+  if (!uploadPreset) {
+    throw new Error(
+      'NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET is not set. Create an unsigned upload preset in your Cloudinary dashboard and add it to your environment variables.'
+    );
+  }
+  return { cloudName, uploadPreset };
 }
 
 function uploadFile(
   file: File,
-  signature: UploadSignature,
+  cloudName: string,
+  uploadPreset: string,
   onProgress?: (progress: number) => void
 ): Promise<UploadResult> {
   const data = new FormData();
   data.append('file', file);
-  data.append('api_key', signature.apiKey);
-  data.append('timestamp', String(signature.timestamp));
-  data.append('signature', signature.signature);
-  data.append('folder', signature.folder);
+  data.append('upload_preset', uploadPreset);
 
   // Browsers commonly report M4A files as video/mp4 even though they contain
   // audio, and Cloudinary handles all audio through its `video` endpoint.
   const isAudio = file.type.startsWith('audio/') || file.type === 'video/mp4';
   const resourceType = isAudio ? 'video' : 'image';
-  const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(signature.cloudName)}/${resourceType}/upload`;
+  const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${resourceType}/upload`;
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -95,31 +72,17 @@ function uploadFile(
   });
 }
 
+/**
+ * Uploads a file to Cloudinary using an unsigned upload preset.
+ * No API key or secret is required — only the cloud name and upload preset
+ * configured in the Cloudinary dashboard.
+ */
 export async function uploadToCloudinary(
   file: File,
-  folder: CloudinaryFolder,
-  token: string,
+  _folder?: string,
+  _token?: string,
   onProgress?: (progress: number) => void
 ): Promise<UploadResult> {
-  const signatureResponse = await fetch('/api/cloudinary/signature', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ folder })
-  });
-
-  if (!signatureResponse.ok) {
-    throw new Error(
-      await responseError(signatureResponse, 'Could not authorize the media upload.')
-    );
-  }
-
-  const signature = (await signatureResponse.json()) as unknown;
-  if (!isUploadSignature(signature)) {
-    throw new Error('The upload service returned an invalid response. Please try again.');
-  }
-
-  return uploadFile(file, signature, onProgress);
+  const { cloudName, uploadPreset } = getUnsignedConfig();
+  return uploadFile(file, cloudName, uploadPreset, onProgress);
 }

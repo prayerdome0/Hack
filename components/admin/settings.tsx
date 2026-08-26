@@ -121,7 +121,7 @@ function SettingsContent() {
               detail={configured ? 'Client SDK ready' : 'Add NEXT_PUBLIC_FIREBASE_* variables'}
             />
             <HealthRow
-              label="Cloudinary signed uploads"
+              label="Cloudinary unsigned uploads"
               state={cloudinary.state}
               detail={cloudinary.detail}
             />
@@ -153,7 +153,7 @@ function SettingsContent() {
                 Media organization
               </h2>
               <p className="mt-1 text-xs text-white/35">
-                Signed Cloudinary uploads use predictable folders.
+                Unsigned Cloudinary uploads use predictable folders.
               </p>
             </div>
           </div>
@@ -190,9 +190,10 @@ function SettingsContent() {
         </div>
         <ul className="mt-6 grid gap-4 text-sm leading-6 text-white/50 md:grid-cols-3">
           <li>
-            Cloudinary credentials stay in <code className="text-gold/80">CLOUDINARY_URL</code>{' '}
-            (or the three server-only Cloudinary variables). Only short-lived signatures
-            reach the browser.
+            Cloudinary uploads use an unsigned preset — only{' '}
+            <code className="text-gold/80">NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</code> and{' '}
+            <code className="text-gold/80">NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET</code>{' '}
+            are needed. No API key or secret is required.
           </li>
           <li>
             Firestore rules protect favorites, playlists and listening history by Firebase
@@ -206,11 +207,11 @@ function SettingsContent() {
         </ul>
         <div className="mt-6 flex flex-wrap gap-5">
           <Link
-            href="https://cloudinary.com/documentation/node_integration#configuration"
+            href="https://cloudinary.com/documentation/upload_presets#unsigned_upload_presets"
             target="_blank"
             className="inline-flex items-center gap-2 text-xs font-semibold text-gold hover:text-gold-bright"
           >
-            Cloudinary configuration guide <ExternalLink className="h-3.5 w-3.5" />
+            Unsigned upload presets guide <ExternalLink className="h-3.5 w-3.5" />
           </Link>
           <Link
             href="https://firebase.google.com/docs/firestore/security/get-started"
